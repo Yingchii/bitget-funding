@@ -1,0 +1,13 @@
+# 絕對不能進版控：LINE token
+line_config.json
+
+# 本機執行產生的檔案
+.funding_state.json
+state/
+*.csv
+*.json
+!.github/**/*.json
+
+__pycache__/
+*.pyc
+.venv/

@@ -1,0 +1,4 @@
+# workflow 裡的 shell 用了反斜線續行，CRLF 會讓 bash 解析失敗
+* text=auto eol=lf
+*.yml text eol=lf
+*.py  text eol=lf
