@@ -6,6 +6,11 @@ on:
     # 想省 Actions 額度可改成每 2 小時： '5 */2 * * *'
     - cron: '5 * * * *'
   workflow_dispatch:        # 也可以在網頁上手動按一次
+    inputs:
+      test_notify:
+        description: '只發一則 LINE 測試訊息驗證通道（不做掃描）'
+        type: boolean
+        default: false
 
 # 避免上一輪還沒跑完就啟動下一輪，導致狀態檔打架
 concurrency:
@@ -37,7 +42,17 @@ jobs:
           restore-keys: |
             funding-state-
 
+      # 只在手動勾選時執行。刻意不吞錯誤：token 有問題就讓 job 變紅，
+      # 這樣才驗證得出 GitHub Secret → 腳本 → LINE 整條鏈路
+      - name: LINE 通道測試
+        if: ${{ inputs.test_notify }}
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_TO }}
+        run: python bitget_funding_scan.py --test-notify
+
       - name: 掃描並通報
+        if: ${{ ! inputs.test_notify }}
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_TO: ${{ secrets.LINE_TO }}
@@ -51,14 +66,14 @@ jobs:
 
       # cache key 是不可變的，所以用 run_id 當 key、prefix 當 restore-keys
       - name: 保存通報狀態
-        if: always()
+        if: ${{ always() && ! inputs.test_notify }}
         uses: actions/cache/save@v6
         with:
           path: state
           key: funding-state-${{ github.run_id }}
 
       - name: 上傳掃描結果
-        if: always()
+        if: ${{ always() && ! inputs.test_notify }}
         uses: actions/upload-artifact@v7
         with:
           name: scan-result-${{ github.run_number }}
