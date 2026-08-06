@@ -450,6 +450,21 @@ def load_line_config(cfg: argparse.Namespace) -> tuple[str, str]:
             f"找不到 LINE channel access token。\n"
             f"請設環境變數 LINE_CHANNEL_ACCESS_TOKEN，或建立 {path}：\n"
             f'{{"channel_access_token": "xxx", "to": ""}}')
+
+    # HTTP header 只能是 latin-1，token 混到中文或全形空白會在送出時
+    # 噴 UnicodeEncodeError；提前擋下並講清楚原因
+    if not token.isascii():
+        bad = [c for c in token if not c.isascii()][:5]
+        raise RuntimeError(
+            f"token 含有非 ASCII 字元 {bad}，看起來還是範本文字或貼到了全形字。\n"
+            f"請到 LINE Developers Console → Messaging API 分頁最下方，\n"
+            f"按 Channel access token (long-lived) 的 Issue，複製那一長串貼進 {path}。")
+    if len(token) < 100:
+        raise RuntimeError(
+            f"token 長度只有 {len(token)} 字元，正常的 long-lived token 有 170 字元以上。\n"
+            f"請確認複製完整（不要只複製到一半）。")
+    if not to.isascii():
+        raise RuntimeError("LINE_TO 含有非 ASCII 字元；自用請直接留空以使用 broadcast。")
     return token, to
 
 
@@ -460,11 +475,18 @@ def push_line(token: str, to: str, text: str) -> None:
     if to:
         payload["to"] = to
 
-    r = requests.post(endpoint, headers={
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }, json=payload, timeout=15)
+    try:
+        r = requests.post(endpoint, headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }, json=payload, timeout=15)
+    except UnicodeEncodeError as e:
+        raise RuntimeError(f"token 含有無法送出的字元：{e}") from e
+    except requests.RequestException as e:
+        raise RuntimeError(f"連線 LINE API 失敗：{e}") from e
 
+    if r.status_code == 401:
+        raise RuntimeError("LINE 認證失敗 (401)：token 無效或已被重新產生而失效。")
     if r.status_code != 200:
         raise RuntimeError(f"LINE 推送失敗 HTTP {r.status_code}: {r.text[:300]}")
 
