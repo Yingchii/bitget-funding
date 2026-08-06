@@ -18,9 +18,9 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -30,7 +30,7 @@ jobs:
 
       # 通報冷卻記錄要跨執行保留，否則每小時都會重複發同一檔
       - name: 還原通報狀態
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: state
           key: funding-state-${{ github.run_id }}
@@ -52,14 +52,14 @@ jobs:
       # cache key 是不可變的，所以用 run_id 當 key、prefix 當 restore-keys
       - name: 保存通報狀態
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: state
           key: funding-state-${{ github.run_id }}
 
       - name: 上傳掃描結果
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scan-result-${{ github.run_number }}
           path: state/latest.json
