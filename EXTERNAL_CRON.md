@@ -15,10 +15,16 @@ GitHub → Settings → Developer settings → Personal access tokens →
 |---|---|
 | Repository access | Only select repositories → `Yingchii/bitget-funding` |
 | Permissions → Actions | **Read and write** |
-| Expiration | 建議 90 天或 1 年，到期要記得換 |
+| Expiration | **No expiration**（本專案採用，見下方取捨） |
 
-只給這一個 repo、只給 Actions 權限，外洩時的損失就侷限在「別人能觸發這個
-workflow」，動不到你的其他 repo，也碰不到交易所金鑰（金鑰在本機，從不上雲）。
+只給這一個 repo、只給 Actions 權限，外洩時的損失就侷限在「別人能觸發或取消這個
+workflow、刪執行紀錄」——改不了程式碼（沒給 Contents 權限）、偷不到 LINE token
+（Secrets 加密且 log 遮罩）、更碰不到交易所金鑰（金鑰在本機，從不上雲）。
+
+**為什麼選永久**：權限已限縮到最小，最壞情況是被惡意觸發多收幾則 LINE，屬騷擾
+等級；相對地設到期日就得每隔幾個月重設，忘記會默默失效——那個麻煩比風險更實際。
+代價是要顧好 cron-job.org 帳號（token 存在那裡，是唯一入口），token 字串別外流，
+不用時記得回 GitHub 按 Delete。
 
 ## 2. 在 cron-job.org 建立 job
 
