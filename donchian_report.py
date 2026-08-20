@@ -75,8 +75,8 @@ def donchian_positions(candles: list[dict], entry: int, exit_: int) -> list[bool
     return pos
 
 
-def fetch_position() -> tuple[bool, float] | None:
-    """從 secret gist 讀本機同步上來的持倉狀態；讀不到回 None（退回無狀態模式）。"""
+def fetch_position() -> tuple[bool, float, float] | None:
+    """從 secret gist 讀本機同步上來的 (holding, size, avg_price)；讀不到回 None。"""
     gid = os.environ.get("POSITION_GIST_ID", "").strip()
     if not gid:
         return None
@@ -88,7 +88,8 @@ def fetch_position() -> tuple[bool, float] | None:
             print(f"！讀持倉 gist 失敗 HTTP {r.status_code}", file=sys.stderr)
             return None
         st = r.json()
-        return bool(st.get("holding")), float(st.get("size", 0))
+        return (bool(st.get("holding")), float(st.get("size", 0)),
+                float(st.get("avg_price", 0)))
     except Exception as e:
         print(f"！讀持倉 gist 失敗：{e}", file=sys.stderr)
         return None
@@ -140,8 +141,12 @@ def main() -> None:
         f"進場線 {upper:,.0f}｜出場線 {lower:,.0f}",
     ]
     if position is not None:
-        holding, size = position
-        lines.append(f"持倉：{f'{size:.6f} 顆' if holding else '無'}")
+        holding, size, avg_price = position
+        if holding and avg_price > 0:
+            lines.append(f"持倉：{size:.6f} 顆｜均價 {avg_price:,.0f}"
+                         f"（{last['close'] / avg_price - 1:+.1%}）")
+        else:
+            lines.append(f"持倉：{f'{size:.6f} 顆' if holding else '無'}")
         if pos[-1] and not holding:
             action = "⚠️ 模型做多但未持倉 → 考慮在本機跑 model_order.py 進場"
         elif not pos[-1] and holding:
