@@ -1,13 +1,21 @@
 name: 唐奇安觸發通報
 
-# 每天收盤後檢查一次，但「只在訊號翻轉／需要動作時」才發 LINE（--only-action），
-# 平常安靜。手動觸發則發完整日報。盤中觸線另由 donchian-intraday.yml 預警。
+# 檢查日 K 收盤訊號，「只在訊號翻轉／需要動作時」才發 LINE，平常安靜。
+#
+# 觸發來源有兩個，去重靠 state/report_state.json（同一日K+同一動作只發一次）：
+#  1. 外部 cron（cron-job.org 等）打 API 準時觸發，帶 only_action=true —— 主要來源
+#  2. 下面的 GitHub schedule —— 備援，免費方案會延遲 20~40 分鐘；
+#     若外部 cron 已準時發過，這班會自動略過不重發。
+# 手動觸發（不勾 only_action）則一律發完整日報，方便隨時查看狀態。
 on:
   schedule:
-    # 台灣時間約 09:15（01:15 UTC）檢查前一日收盤；免費方案排程會延遲。
-    - cron: '15 1 * * *'
+    - cron: '15 1 * * *'   # 台灣約 09:15，實際延後 20~40 分鐘才跑
   workflow_dispatch:
     inputs:
+      only_action:
+        description: '只在訊號翻轉/需動作時才發（外部 cron 請設 true）'
+        type: boolean
+        default: false
       dry_run:
         description: '只印訊息內容，不發 LINE'
         type: boolean
@@ -33,13 +41,29 @@ jobs:
       - name: 安裝套件
         run: pip install -r requirements.txt
 
+      # 去重記錄要跨執行保留，否則外部 cron 與 schedule 會各發一次
+      - name: 還原去重狀態
+        uses: actions/cache/restore@v6
+        with:
+          path: state
+          key: donchian-report-${{ github.run_id }}
+          restore-keys: |
+            donchian-report-
+
       - name: 算訊號並發 LINE
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_TO: ${{ secrets.LINE_TO }}
           POSITION_GIST_ID: ${{ secrets.POSITION_GIST_ID }}
-        # 排程跑 --only-action（觸發才發）；手動觸發發完整日報
-        run: >
-          python donchian_report.py
-          ${{ github.event_name == 'schedule' && '--only-action' || '' }}
-          ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          mkdir -p state
+          python donchian_report.py \
+            ${{ (github.event_name == 'schedule' || inputs.only_action) && '--only-action --state-file state/report_state.json' || '' }} \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: 保存去重狀態
+        if: ${{ always() }}
+        uses: actions/cache/save@v6
+        with:
+          path: state
+          key: donchian-report-${{ github.run_id }}

@@ -8,6 +8,8 @@
     python donchian_report.py                # 算訊號並發 LINE
     python donchian_report.py --dry-run      # 只印不發
     python donchian_report.py --only-action  # 翻轉當天才發
+    python donchian_report.py --state-file state/report_state.json
+        # 同一日 K + 同一動作只發一次，外部 cron 與 GitHub 排程重複觸發也不會重複發
 
 LINE 設定沿用本 repo 慣例：環境變數 LINE_CHANNEL_ACCESS_TOKEN / LINE_TO
 （GitHub Secrets），本機測試時退回讀 line_config.json。
@@ -150,6 +152,8 @@ def main() -> None:
     ap.add_argument("--exit", type=int, default=20, dest="exit_")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--only-action", action="store_true")
+    ap.add_argument("--state-file", default="",
+                    help="去重記錄檔；同一日 K + 同一動作只發一次")
     args = ap.parse_args()
 
     candles = fetch_daily_candles(args.symbol)
@@ -202,8 +206,24 @@ def main() -> None:
     if args.dry_run or (args.only_action and not need_action):
         print("（未發送）")
         return
+
+    # 去重：外部 cron 與 GitHub 排程可能都觸發同一天的同一則通報
+    state_path = Path(args.state_file) if args.state_file else None
+    key = f"{date}|{action}"
+    if state_path and state_path.exists():
+        try:
+            if json.loads(state_path.read_text(encoding="utf-8")).get("last_key") == key:
+                print("（同一則通報已發過，略過）")
+                return
+        except Exception as e:
+            print(f"！去重記錄讀取失敗，照常發送：{e}", file=sys.stderr)
+
     push_line(msg)
     print("已發 LINE。")
+    if state_path:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps({"last_key": key}, ensure_ascii=False),
+                              encoding="utf-8")
 
 
 if __name__ == "__main__":
