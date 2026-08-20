@@ -1,0 +1,38 @@
+name: 每週回測週報
+
+on:
+  schedule:
+    # 台灣時間週一約 09:30（01:30 UTC）。免費方案排程會延遲，實際送達會晚一些。
+    - cron: '30 1 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只印報告內容，不發 LINE'
+        type: boolean
+        default: false
+
+concurrency:
+  group: weekly-backtest
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: 安裝套件
+        run: pip install -r requirements.txt
+
+      - name: 回測並發 LINE
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_TO }}
+        run: python weekly_backtest.py ${{ inputs.dry_run && '--dry-run' || '' }}
