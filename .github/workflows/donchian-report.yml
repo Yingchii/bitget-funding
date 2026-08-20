@@ -1,0 +1,39 @@
+name: 唐奇安每日日報
+
+on:
+  schedule:
+    # 台灣時間約 09:15（01:15 UTC）。免費方案排程會延遲，實際送達時間會晚一些；
+    # 日 K 在台灣午夜就收盤了，早上任何時間發內容都一樣。
+    - cron: '15 1 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只印訊息內容，不發 LINE'
+        type: boolean
+        default: false
+
+concurrency:
+  group: donchian-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: 安裝套件
+        run: pip install -r requirements.txt
+
+      - name: 算訊號並發 LINE
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_TO }}
+        run: python donchian_report.py ${{ inputs.dry_run && '--dry-run' || '' }}
