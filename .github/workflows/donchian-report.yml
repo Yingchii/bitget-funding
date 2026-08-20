@@ -36,4 +36,5 @@ jobs:
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_TO: ${{ secrets.LINE_TO }}
+          POSITION_GIST_ID: ${{ secrets.POSITION_GIST_ID }}
         run: python donchian_report.py ${{ inputs.dry_run && '--dry-run' || '' }}

@@ -75,6 +75,25 @@ def donchian_positions(candles: list[dict], entry: int, exit_: int) -> list[bool
     return pos
 
 
+def fetch_position() -> tuple[bool, float] | None:
+    """從 secret gist 讀本機同步上來的持倉狀態；讀不到回 None（退回無狀態模式）。"""
+    gid = os.environ.get("POSITION_GIST_ID", "").strip()
+    if not gid:
+        return None
+    try:
+        r = requests.get(
+            f"https://gist.githubusercontent.com/Yingchii/{gid}/raw/model_position.json",
+            timeout=15)
+        if r.status_code != 200:
+            print(f"！讀持倉 gist 失敗 HTTP {r.status_code}", file=sys.stderr)
+            return None
+        st = r.json()
+        return bool(st.get("holding")), float(st.get("size", 0))
+    except Exception as e:
+        print(f"！讀持倉 gist 失敗：{e}", file=sys.stderr)
+        return None
+
+
 def push_line(text: str) -> None:
     token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "").strip()
     to = os.environ.get("LINE_TO", "").strip()
@@ -114,23 +133,35 @@ def main() -> None:
     # K 線以 UTC+8 午夜切日，ts 是開盤時間：+8h 即為該日 K 的台灣日期
     date = time.strftime("%m/%d", time.gmtime(last["ts"] / 1000 + 8 * 3600))
 
-    flipped = len(pos) >= 2 and pos[-1] != pos[-2]
-    if flipped and pos[-1]:
-        action = "⚠️ 今日翻多 → 若要跟單，請在本機跑 model_order.py 進場"
-    elif flipped:
-        action = "⚠️ 今日翻空手 → 若仍持倉，請在本機跑 model_order.py 出場"
-    else:
-        action = "今日無翻轉"
-
-    msg = "\n".join([
+    position = fetch_position()
+    lines = [
         f"📈 唐奇安 {args.symbol} 日報（{date} 收盤・雲端）",
         f"狀態：{'做多' if pos[-1] else '空手'}｜收盤 {last['close']:,.0f}",
         f"進場線 {upper:,.0f}｜出場線 {lower:,.0f}",
-        action,
-    ])
+    ]
+    if position is not None:
+        holding, size = position
+        lines.append(f"持倉：{f'{size:.6f} 顆' if holding else '無'}")
+        if pos[-1] and not holding:
+            action = "⚠️ 模型做多但未持倉 → 考慮在本機跑 model_order.py 進場"
+        elif not pos[-1] and holding:
+            action = f"⚠️ 模型翻空手但仍持有 {size:.6f} 顆 → 考慮在本機跑 model_order.py 出場"
+        else:
+            action = "✅ 與持倉一致，不需動作"
+    else:
+        flipped = len(pos) >= 2 and pos[-1] != pos[-2]
+        if flipped and pos[-1]:
+            action = "⚠️ 今日翻多 → 若要跟單，請在本機跑 model_order.py 進場"
+        elif flipped:
+            action = "⚠️ 今日翻空手 → 若仍持倉，請在本機跑 model_order.py 出場"
+        else:
+            action = "今日無翻轉"
+    lines.append(action)
+    msg = "\n".join(lines)
 
     print(msg)
-    if args.dry_run or (args.only_action and not flipped):
+    need_action = action.startswith("⚠️")
+    if args.dry_run or (args.only_action and not need_action):
         print("（未發送）")
         return
     push_line(msg)
