@@ -96,6 +96,31 @@ def fetch_position() -> tuple[bool, float, float] | None:
         return None
 
 
+def fetch_mvrv() -> tuple[float, float | None] | None:
+    """CoinMetrics 免費 API 抓 BTC MVRV，回 (最新值, 前一日值)；失敗回 None。
+
+    最新一兩天的值可能還是 null（他們算得慢），取最近的非空值。
+    """
+    try:
+        start = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 7 * 86400))
+        r = requests.get(
+            "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics",
+            params={"assets": "btc", "metrics": "CapMVRVCur", "frequency": "1d",
+                    "sort": "time", "page_size": 10, "start_time": start},
+            timeout=15)
+        if r.status_code != 200:
+            print(f"！MVRV 抓取失敗 HTTP {r.status_code}", file=sys.stderr)
+            return None
+        vals = [float(row["CapMVRVCur"]) for row in r.json().get("data", [])
+                if row.get("CapMVRVCur") is not None]
+        if not vals:
+            return None
+        return vals[-1], (vals[-2] if len(vals) >= 2 else None)
+    except Exception as e:
+        print(f"！MVRV 抓取失敗：{e}", file=sys.stderr)
+        return None
+
+
 def push_line(text: str) -> None:
     token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "").strip()
     to = os.environ.get("LINE_TO", "").strip()
@@ -164,6 +189,11 @@ def main() -> None:
             action = "⚠️ 今日翻空手 → 若仍持倉，請在本機跑 model_order.py 出場"
         else:
             action = "今日無翻轉"
+    mvrv = fetch_mvrv()
+    if mvrv is not None:
+        cur, prev = mvrv
+        trend = f"，前日 {prev:.2f}" if prev is not None else ""
+        lines.append(f"鏈上 MVRV：{cur:.2f}{trend}（>3 過熱 / <1 低估）")
     lines.append(action)
     msg = "\n".join(lines)
 
