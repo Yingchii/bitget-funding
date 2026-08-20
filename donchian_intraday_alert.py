@@ -18,7 +18,7 @@ from pathlib import Path
 
 import requests
 
-from donchian_report import fetch_daily_candles, fetch_position, push_line
+from donchian_report import fetch_daily_candles, fetch_position, fmt_price, push_line
 
 COOLDOWN_H = 12
 
@@ -44,7 +44,8 @@ def main() -> None:
     lower = min(x["low"] for x in candles[-args.exit_:])
     price = get_price(args.symbol)
 
-    position = fetch_position()
+    # gist 只記 BTC 模型的持倉，其他幣種一律當未知（兩條線都盯）
+    position = fetch_position() if args.symbol == "BTCUSDT" else None
     holding = position[0] if position is not None else None  # None = 未知，兩條都盯
 
     state_path = Path(args.state_file)
@@ -54,19 +55,25 @@ def main() -> None:
     def cooled(key: str) -> bool:
         return now - state.get(key, 0) > COOLDOWN_H * 3600
 
+    # 冷卻記錄依幣種分開，共用同一個 state 檔
+    entry_key = f"{args.symbol}:entry_alert_ts"
+    exit_key = f"{args.symbol}:exit_alert_ts"
+    exit_hint = ("記得跑 model_order.py 出場" if args.symbol == "BTCUSDT"
+                 else "若有持倉記得手動出場")
     alerts: list[tuple[str, str]] = []
-    if holding in (False, None) and price > upper and cooled("entry_alert_ts"):
-        alerts.append(("entry_alert_ts",
-                       f"🔔 盤中突破進場線！\n{args.symbol} 現價 {price:,.0f} > "
-                       f"55日高 {upper:,.0f}\n正式訊號以今日收盤為準；"
+    if holding in (False, None) and price > upper and cooled(entry_key):
+        alerts.append((entry_key,
+                       f"🔔 盤中突破進場線！\n{args.symbol} 現價 {fmt_price(price)} > "
+                       f"{args.entry}日高 {fmt_price(upper)}\n正式訊號以今日收盤為準；"
                        f"若收盤站穩，明早日報會提示進場。"))
-    if holding in (True, None) and price < lower and cooled("exit_alert_ts"):
-        alerts.append(("exit_alert_ts",
-                       f"🔔 盤中跌破出場線！\n{args.symbol} 現價 {price:,.0f} < "
-                       f"20日低 {lower:,.0f}\n正式訊號以今日收盤為準；"
-                       f"若收盤確認跌破，記得跑 model_order.py 出場。"))
+    if holding in (True, None) and price < lower and cooled(exit_key):
+        alerts.append((exit_key,
+                       f"🔔 盤中跌破出場線！\n{args.symbol} 現價 {fmt_price(price)} < "
+                       f"{args.exit_}日低 {fmt_price(lower)}\n正式訊號以今日收盤為準；"
+                       f"若收盤確認跌破，{exit_hint}。"))
 
-    status = f"{args.symbol} 現價 {price:,.0f}｜進場線 {upper:,.0f}｜出場線 {lower:,.0f}｜" \
+    status = f"{args.symbol} 現價 {fmt_price(price)}｜進場線 {fmt_price(upper)}｜" \
+             f"出場線 {fmt_price(lower)}｜" \
              f"持倉 {'未知' if holding is None else ('有' if holding else '無')}"
     if not alerts:
         print(f"{status} → 無警報")

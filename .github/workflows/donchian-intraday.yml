@@ -48,9 +48,12 @@ jobs:
           POSITION_GIST_ID: ${{ secrets.POSITION_GIST_ID }}
         run: |
           mkdir -p state
-          python donchian_intraday_alert.py \
-            --state-file state/intraday_state.json \
-            ${{ inputs.dry_run && '--dry-run' || '' }}
+          for sym in BTCUSDT HYPEUSDT; do
+            python donchian_intraday_alert.py \
+              --symbol "$sym" \
+              --state-file state/intraday_state.json \
+              ${{ inputs.dry_run && '--dry-run' || '' }}
+          done
 
       - name: 保存冷卻狀態
         if: ${{ always() }}

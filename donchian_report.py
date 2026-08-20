@@ -30,6 +30,13 @@ DAY_MS = 24 * 3600_000
 FEE_RATE = 0.001  # 單邊手續費（Bitget 現貨 0.1%；BGB 折抵會更低，保守取整）
 
 
+def fmt_price(v: float) -> str:
+    """BTC 等大價位取整；HYPE 等小價位保留小數。"""
+    if v >= 1000:
+        return f"{v:,.0f}"
+    return f"{v:,.2f}" if v >= 1 else f"{v:.4g}"
+
+
 def fetch_daily_candles(symbol: str, bars: int = 300) -> list[dict]:
     """回傳由舊到新的已收盤日 K：[{ts, high, low, close}, ...]"""
     rows: list[list] = []
@@ -164,18 +171,19 @@ def main() -> None:
     # K 線以 UTC+8 午夜切日，ts 是開盤時間：+8h 即為該日 K 的台灣日期
     date = time.strftime("%m/%d", time.gmtime(last["ts"] / 1000 + 8 * 3600))
 
-    position = fetch_position()
+    # gist 只記 BTC 模型的持倉，其他幣種一律當未知
+    position = fetch_position() if args.symbol == "BTCUSDT" else None
     lines = [
         f"📈 唐奇安 {args.symbol} 日報（{date} 收盤・雲端）",
-        f"狀態：{'做多' if pos[-1] else '空手'}｜收盤 {last['close']:,.0f}",
-        f"進場線 {upper:,.0f}｜出場線 {lower:,.0f}",
+        f"狀態：{'做多' if pos[-1] else '空手'}｜收盤 {fmt_price(last['close'])}",
+        f"進場線 {fmt_price(upper)}｜出場線 {fmt_price(lower)}",
     ]
     if position is not None:
         holding, size, avg_price = position
         if holding and avg_price > 0:
             # 現在出場的淨損益：扣進場費＋出場費各一次
             net = last["close"] * (1 - FEE_RATE) / (avg_price * (1 + FEE_RATE)) - 1
-            lines.append(f"持倉：{size:.6f} 顆｜均價 {avg_price:,.0f}"
+            lines.append(f"持倉：{size:.6f} 顆｜均價 {fmt_price(avg_price)}"
                          f"（含費 {net:+.1%}）")
         else:
             lines.append(f"持倉：{f'{size:.6f} 顆' if holding else '無'}")
@@ -187,13 +195,16 @@ def main() -> None:
             action = "✅ 與持倉一致，不需動作"
     else:
         flipped = len(pos) >= 2 and pos[-1] != pos[-2]
+        # model_order.py 的持倉記錄只跟 BTC 綁定，其他幣種提示手動下單
+        tool = ("請在本機跑 model_order.py " if args.symbol == "BTCUSDT"
+                else "請自行在本機手動")
         if flipped and pos[-1]:
-            action = "⚠️ 今日翻多 → 若要跟單，請在本機跑 model_order.py 進場"
+            action = f"⚠️ 今日翻多 → 若要跟單，{tool}進場"
         elif flipped:
-            action = "⚠️ 今日翻空手 → 若仍持倉，請在本機跑 model_order.py 出場"
+            action = f"⚠️ 今日翻空手 → 若仍持倉，{tool}出場"
         else:
             action = "今日無翻轉"
-    mvrv = fetch_mvrv()
+    mvrv = fetch_mvrv() if args.symbol == "BTCUSDT" else None
     if mvrv is not None:
         cur, prev = mvrv
         trend = f"，前日 {prev:.2f}" if prev is not None else ""
@@ -209,7 +220,7 @@ def main() -> None:
 
     # 去重：外部 cron 與 GitHub 排程可能都觸發同一天的同一則通報
     state_path = Path(args.state_file) if args.state_file else None
-    key = f"{date}|{action}"
+    key = f"{args.symbol}|{date}|{action}"
     if state_path and state_path.exists():
         try:
             if json.loads(state_path.read_text(encoding="utf-8")).get("last_key") == key:
