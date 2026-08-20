@@ -1,0 +1,60 @@
+name: 唐奇安盤中預警
+
+on:
+  schedule:
+    # 名目上每 15 分鐘；免費方案會延遲，實際約 20~40 分鐘一輪。
+    # 真正秒級的即時警報請用 TradingView alert，這條是 LINE 側的補位。
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只印判斷結果，不發 LINE'
+        type: boolean
+        default: false
+
+concurrency:
+  group: donchian-intraday
+  cancel-in-progress: true   # 排隊塞車時只留最新一輪，預警要的是新鮮度
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: 安裝套件
+        run: pip install -r requirements.txt
+
+      # 冷卻記錄要跨執行保留，否則觸線期間每 15 分鐘都會重發
+      - name: 還原冷卻狀態
+        uses: actions/cache/restore@v6
+        with:
+          path: state
+          key: donchian-intraday-${{ github.run_id }}
+          restore-keys: |
+            donchian-intraday-
+
+      - name: 檢查價格與關鍵線
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_TO }}
+          POSITION_GIST_ID: ${{ secrets.POSITION_GIST_ID }}
+        run: |
+          mkdir -p state
+          python donchian_intraday_alert.py \
+            --state-file state/intraday_state.json \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: 保存冷卻狀態
+        if: ${{ always() }}
+        uses: actions/cache/save@v6
+        with:
+          path: state
+          key: donchian-intraday-${{ github.run_id }}
