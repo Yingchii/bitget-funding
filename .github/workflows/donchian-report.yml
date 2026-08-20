@@ -57,7 +57,9 @@ jobs:
           POSITION_GIST_ID: ${{ secrets.POSITION_GIST_ID }}
         run: |
           mkdir -p state
-          for sym in BTCUSDT HYPEUSDT; do
+          # HYPE 已封存（2026-08-21）：波動太大，不適合 55/20 唐奇安。
+          # 要重啟時把幣種加回下面的清單即可，腳本本身支援多幣種。
+          for sym in BTCUSDT; do
             python donchian_report.py \
               --symbol "$sym" \
               ${{ (github.event_name == 'schedule' || inputs.only_action) && '--only-action --state-file "state/report_state_${sym}.json"' || '' }} \
