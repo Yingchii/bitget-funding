@@ -1,9 +1,8 @@
-name: 每週回測週報
+name: 策略回測報告（手動）
 
+# 不排程（使用者要的是追蹤自己的實際交易，見本機 trade_review.py 雙週報告）。
+# 想看策略回測健檢時手動觸發即可。
 on:
-  schedule:
-    # 台灣時間週一約 09:30（01:30 UTC）。免費方案排程會延遲，實際送達會晚一些。
-    - cron: '30 1 * * 1'
   workflow_dispatch:
     inputs:
       dry_run:

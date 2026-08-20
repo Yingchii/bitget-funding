@@ -1,10 +1,9 @@
-name: 唐奇安每日日報
+name: 唐奇安日報（手動）
 
+# 2026-08-20 起停用每日排程（交易頻率低，不需每天發報）。
+# 模型狀態改併入本機雙週交易報告（trading-exec\trade_review.py）；
+# 進出場觸線仍由 donchian-intraday.yml 即時預警。要看日報可手動觸發。
 on:
-  schedule:
-    # 台灣時間約 09:15（01:15 UTC）。免費方案排程會延遲，實際送達時間會晚一些；
-    # 日 K 在台灣午夜就收盤了，早上任何時間發內容都一樣。
-    - cron: '15 1 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
