@@ -25,6 +25,7 @@ import requests
 
 BASE_URL = "https://api.bitget.com"
 DAY_MS = 24 * 3600_000
+FEE_RATE = 0.001  # 單邊手續費（Bitget 現貨 0.1%；BGB 折抵會更低，保守取整）
 
 
 def fetch_daily_candles(symbol: str, bars: int = 300) -> list[dict]:
@@ -143,8 +144,10 @@ def main() -> None:
     if position is not None:
         holding, size, avg_price = position
         if holding and avg_price > 0:
+            # 現在出場的淨損益：扣進場費＋出場費各一次
+            net = last["close"] * (1 - FEE_RATE) / (avg_price * (1 + FEE_RATE)) - 1
             lines.append(f"持倉：{size:.6f} 顆｜均價 {avg_price:,.0f}"
-                         f"（{last['close'] / avg_price - 1:+.1%}）")
+                         f"（含費 {net:+.1%}）")
         else:
             lines.append(f"持倉：{f'{size:.6f} 顆' if holding else '無'}")
         if pos[-1] and not holding:
