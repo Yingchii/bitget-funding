@@ -1,9 +1,11 @@
-name: 唐奇安日報（手動）
+name: 唐奇安觸發通報
 
-# 2026-08-20 起停用每日排程（交易頻率低，不需每天發報）。
-# 模型狀態改併入本機雙週交易報告（trading-exec\trade_review.py）；
-# 進出場觸線仍由 donchian-intraday.yml 即時預警。要看日報可手動觸發。
+# 每天收盤後檢查一次，但「只在訊號翻轉／需要動作時」才發 LINE（--only-action），
+# 平常安靜。手動觸發則發完整日報。盤中觸線另由 donchian-intraday.yml 預警。
 on:
+  schedule:
+    # 台灣時間約 09:15（01:15 UTC）檢查前一日收盤；免費方案排程會延遲。
+    - cron: '15 1 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -36,4 +38,8 @@ jobs:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_TO: ${{ secrets.LINE_TO }}
           POSITION_GIST_ID: ${{ secrets.POSITION_GIST_ID }}
-        run: python donchian_report.py ${{ inputs.dry_run && '--dry-run' || '' }}
+        # 排程跑 --only-action（觸發才發）；手動觸發發完整日報
+        run: >
+          python donchian_report.py
+          ${{ github.event_name == 'schedule' && '--only-action' || '' }}
+          ${{ inputs.dry_run && '--dry-run' || '' }}
